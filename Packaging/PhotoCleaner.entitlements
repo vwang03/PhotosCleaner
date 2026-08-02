@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+    v1 targets direct/notarized distribution (see PRD section 7 & Risks) rather than
+    the Mac App Store, so App Sandbox is left disabled here. If Mac App Store
+    distribution is pursued later, enable com.apple.security.app-sandbox and add
+    com.apple.security.personal-information.photos-library.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+</dict>
+</plist>
