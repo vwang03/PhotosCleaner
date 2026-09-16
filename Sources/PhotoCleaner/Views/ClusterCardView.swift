@@ -4,7 +4,14 @@ import PhotoCleanerCore
 struct ClusterCardView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     let group: DuplicateGroup
-    @State private var showingDetail = false
+    @State private var detailRequest: DetailRequest?
+
+    /// Which photo (if any) the review sheet should open on, and in which mode.
+    struct DetailRequest: Identifiable {
+        let id = UUID()
+        var assetID: String?
+        var mode: ClusterDetailSheet.Mode = .fullPhoto
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -15,9 +22,15 @@ struct ClusterCardView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            // Lets clicks fall through to the card background, so double-clicking the
+            // group's header counts as double-clicking the section.
+            .allowsHitTesting(false)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                // Lazy so a 50-photo group only builds the thumbnails on screen; the
+                // eager version rebuilt every thumbnail in every group on each
+                // selection change, which showed up as click latency.
+                LazyHStack(spacing: 8) {
                     ForEach(group.assets) { asset in
                         thumbnail(for: asset)
                     }
@@ -28,23 +41,43 @@ struct ClusterCardView: View {
                 Text("Will free \(Formatters.bytesString(viewModel.reclaimableBytes(for: group)))")
                     .font(.callout)
                     .foregroundStyle(.tint)
+                    .allowsHitTesting(false)
 
                 Spacer()
 
                 Button("Select All") { viewModel.selectAll(groupID: group.id) }
                 Button("Deselect All") { viewModel.keepAll(groupID: group.id) }
                 Button("Skip") { viewModel.skipGroup(groupID: group.id) }
-                Button("Review…") { showingDetail = true }
+                Button("Review…") { detailRequest = DetailRequest() }
                     .buttonStyle(.borderedProminent)
             }
             .font(.callout)
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.08)))
-        .sheet(isPresented: $showingDetail) {
-            ClusterDetailSheet(group: group)
-                .environmentObject(viewModel)
+        .background(cardBackground)
+        .help("Double-click to review this group")
+        .sheet(item: $detailRequest) { request in
+            ClusterDetailSheet(
+                group: group,
+                initialFocusedAssetID: request.assetID,
+                initialMode: request.mode
+            )
+            .environmentObject(viewModel)
         }
+    }
+
+    /// Double-click-to-review lives on the card's *background* rather than on the card
+    /// itself. As an ancestor of the thumbnails, a card-level double-click gesture
+    /// competes with their single-click gesture, which forces every mark-for-deletion
+    /// click to wait out the system double-click interval before it registers.
+    /// Hit-testing hands clicks to the topmost view instead, so thumbnails never see
+    /// this gesture and stay instant.
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.gray.opacity(0.08))
+            .onTapGesture(count: 2) {
+                detailRequest = DetailRequest()
+            }
     }
 
     @ViewBuilder
@@ -94,6 +127,19 @@ struct ClusterCardView: View {
                 .background(Circle().fill(.black.opacity(0.4)))
                 .padding(4)
                 .allowsHitTesting(false)
+
+            Button {
+                detailRequest = DetailRequest(assetID: asset.localIdentifier)
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right.circle.fill")
+                    .foregroundStyle(.white)
+                    .background(Circle().fill(.black.opacity(0.4)))
+            }
+            .buttonStyle(.plain)
+            .help("See this photo full size")
+            .padding(4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .help("Click to mark for deletion")
     }
 }

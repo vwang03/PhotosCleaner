@@ -149,6 +149,10 @@ final class AppViewModel: ObservableObject {
         deletionSelections[groupID]?.contains(assetID) ?? false
     }
 
+    func selectedCount(groupID: String) -> Int {
+        deletionSelections[groupID]?.count ?? 0
+    }
+
     /// Selects every photo in the group for deletion. There's no protected "keeper" —
     /// the user has complete control and can freely deselect any of them afterward.
     func selectAll(groupID: String) {
@@ -210,12 +214,23 @@ final class AppViewModel: ObservableObject {
         let identifiers = visibleGroups.flatMap { group -> [String] in
             Array(deletionSelections[group.id] ?? [])
         }
+        await deletePhotos(identifiers: identifiers)
+    }
+
+    /// Deletes only the photos marked within a single group, for finishing one group at
+    /// a time in the review sheet instead of batching every group together.
+    func deleteMarkedPhotos(inGroupID groupID: String) async {
+        await deletePhotos(identifiers: Array(deletionSelections[groupID] ?? []))
+    }
+
+    private func deletePhotos(identifiers: [String]) async {
         guard !identifiers.isEmpty else { return }
 
         do {
+            let identifierSet = Set(identifiers)
             let bytesFreed = groups
                 .flatMap(\.assets)
-                .filter { identifiers.contains($0.localIdentifier) }
+                .filter { identifierSet.contains($0.localIdentifier) }
                 .reduce(Int64(0)) { $0 + $1.fileSizeBytes }
 
             let deletedCount = try await deletionService.deleteAssets(identifiers: identifiers)
@@ -223,7 +238,7 @@ final class AppViewModel: ObservableObject {
             let report = SessionReport(photosDeleted: deletedCount, bytesFreed: bytesFreed)
             try await reportStore.record(report)
 
-            removeDeletedAssets(identifiers: Set(identifiers))
+            removeDeletedAssets(identifiers: identifierSet)
             lastSessionSummary = SessionSummary(photosDeleted: deletedCount, bytesFreed: bytesFreed)
             await loadHistory()
         } catch {
